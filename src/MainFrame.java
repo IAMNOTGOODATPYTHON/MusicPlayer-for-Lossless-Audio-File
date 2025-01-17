@@ -700,7 +700,7 @@ public class MainFrame extends JFrame{
             AudioFormat format = new AudioFormat(dec.sampleRate, dec.sampleDepth, dec.numChannels, true, false);
             line = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
             line.open(format);
-            //playButton.doClick();
+            playButton.doClick();
             SwingUtilities.invokeLater(new Runnable() {
                 public void run() {
                     //frame.setTitle(title);
