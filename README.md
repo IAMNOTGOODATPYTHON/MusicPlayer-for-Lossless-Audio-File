@@ -1,2 +1,2 @@
 # MusicPlayer-for-Lossless-Audio-File
-Supported Format: Flac, Wav
+Supported Format: Wav, Flac(not for 24 bits)
