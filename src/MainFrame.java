@@ -293,23 +293,14 @@ public class MainFrame extends JFrame{
     final private void PlayAction() {
         try {
             if(clip != null && clip.isOpen()){
-                if(openCount == 1){
-                    playButton.setVisible(false);
-                    pauseButton.setVisible(true);
-                    clip.start(); startPlaybackCurrentPosition();
-                }
-                else {
-                    playButton.setVisible(false);
-                    pauseButton.setVisible(true);
-                    if (!line.isRunning()) { // Start the line if not already running
-                        line.start();
-                    }
-                }
+                playButton.setVisible(false);
+                pauseButton.setVisible(true);
+                clip.start(); startPlaybackCurrentPosition();
             }
             else if (getFileExtension(fileGroup[currentIndex].getName()).equals("flac")){
                 playButton.setVisible(false);
                 pauseButton.setVisible(true);
-                line.start();
+                decoderThread.start();
             }
         } catch (Exception e) {e.printStackTrace();}
     }
@@ -396,7 +387,6 @@ public class MainFrame extends JFrame{
 
             openRequest = fileGroup[currentIndex]; // Set file for decoding
             decoderThread = new Thread(() -> doAudioDecoderWorkerLoop());
-            decoderThread.start();
             /*  
                 Why the Album Image Might Not Appear Without a Separate Thread:
                 1.Blocking the Event Dispatch Thread (EDT):
@@ -700,7 +690,7 @@ public class MainFrame extends JFrame{
             AudioFormat format = new AudioFormat(dec.sampleRate, dec.sampleDepth, dec.numChannels, true, false);
             line = (SourceDataLine)AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
             line.open(format);
-            playButton.doClick();
+            line.start();
             SwingUtilities.invokeLater(new Runnable() {
                 public void run() {
                     //frame.setTitle(title);
