@@ -20,6 +20,7 @@ public class MainFrame extends JFrame{
     private int currentIndex = 0;
     private int openCount = 0;
     private int songNumber = 1;
+    private int clickcount = 0;
     private String encodiingFormat, sampleRate, bitDepth;
     private JLabel songTitle, songFormat, sliderLabelBegin, sliderLabelEnd, imageLabel;
     private JPanel buttonPanel, sliderPanel, playlistPanel;
@@ -36,6 +37,8 @@ public class MainFrame extends JFrame{
     private PlaybackCurrentPosition_Thread playbackThread;
     private PlayListFrame playlistFrame;
     private Object lock = new Object();
+    private Object playbackLock = new Object();
+    private boolean actionPerformed;
     private File openRequest = null;
     private double seekRequest = -1;  // Either -1 or a number in [0.0, 1.0]
     private FlacDecoder dec = null;
@@ -300,7 +303,14 @@ public class MainFrame extends JFrame{
             else if (getFileExtension(fileGroup[currentIndex].getName()).equals("flac")){
                 playButton.setVisible(false);
                 pauseButton.setVisible(true);
-                decoderThread.start();
+                if(clickcount == 0) {decoderThread.start();clickcount++;}
+                else {
+                    synchronized (lock) {
+                        actionPerformed = true; // Update flag
+                        lock.notify(); // resume the waiting thread
+                        line.start();
+                    }
+                }
             }
         } catch (Exception e) {e.printStackTrace();}
     }
@@ -314,6 +324,9 @@ public class MainFrame extends JFrame{
             else if (getFileExtension(fileGroup[currentIndex].getName()).equals("flac")){
                 pauseButton.setVisible(false);
                 playButton.setVisible(true);
+
+                actionPerformed = false;
+
                 line.stop();
             }
         } catch (Exception ignore) {}
@@ -380,6 +393,7 @@ public class MainFrame extends JFrame{
             clip.open(audioStream);
         }
         else if (getFileExtension(fileGroup[currentIndex].getName()).equals("flac")) {
+            //clickcount == 0 only applicable to the case which the first song is flac file
             setFlacImageLabel(currentIndex);
 
             songTitle.setText(fileGroup[currentIndex].getName());
@@ -397,6 +411,7 @@ public class MainFrame extends JFrame{
                 Swing components (like the label showing the album image) rely on SwingUtilities.invokeLater 
                 to schedule updates on the EDT. If the EDT is blocked, these updates are delayed.
              */
+            actionPerformed = true;
         }
     }
     final private void updatePlaylist() {
@@ -427,6 +442,7 @@ public class MainFrame extends JFrame{
         playbackSlider.setEnabled(false);
 
         if (getFileExtension(fileGroup[index].getName()).equals("wav")){
+            if(decoderThread != null) {line.stop(); decoderThread.interrupt(); decoderThread = null;}
             if(clip != null) {clip.stop(); clip.close();}
 
             sliderLabelBegin.setText("00:00");
@@ -451,24 +467,33 @@ public class MainFrame extends JFrame{
             clip = AudioSystem.getClip();
             clip.open(audioStream);
             clip.start();
+
+            SwingUtilities.invokeLater(() -> {
+                sliderPanel.revalidate(); // Refresh layout
+                sliderPanel.repaint();   // Repaint UI
+                restartPlaybackCurrentPosition();
+            });
         }
         else if (getFileExtension(fileGroup[index].getName()).equals("flac")) {
+            clickcount++;//avoid clickcount == 0
+
+            if(clip != null) {clip.stop(); clip.close();}
+
             setFlacImageLabel(index);
 
             songTitle.setText(fileGroup[index].getName());
             updateSongFormat(fileGroup[index]);
 
             openRequest = fileGroup[index]; // Set file for decoding
-            if (decoderThread == null) new Thread(() -> doAudioDecoderWorkerLoop()).start();
+            decoderThread = new Thread(() -> doAudioDecoderWorkerLoop());
+
+            actionPerformed = true;
+
+            decoderThread.start();
         }
+
         playButton.setVisible(false);
         pauseButton.setVisible(true);
-
-        SwingUtilities.invokeLater(() -> {
-            sliderPanel.revalidate(); // Refresh layout
-            sliderPanel.repaint();   // Repaint UI
-            restartPlaybackCurrentPosition();
-        });
     }
     final private void setFlacImageLabel(int index) {
         Image image = FlacAlbumImageExtractor(fileGroup[index].getPath()).getImage();
@@ -679,6 +704,9 @@ public class MainFrame extends JFrame{
             openRequest = null;
             seekReq = seekRequest;
             seekRequest = -1;
+            while (actionPerformed == false) {
+                lock.wait(); // Wait until notified
+            }
         }
         // Open or switch files, and start audio line
         if (openReq != null) {
