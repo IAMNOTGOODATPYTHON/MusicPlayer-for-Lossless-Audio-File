@@ -26,8 +26,8 @@ public class MainFrame extends JFrame{
     private JPanel buttonPanel, sliderPanel, playlistPanel;
     private JScrollPane playlistScrollPane;
     private JMenuBar menuBar;
-    private JMenu fileMenu, playlistMenu, formatMenu;
-    private JMenuItem openMenuItem, resetMenuItem, randomizeMenuItem, displayMenuItem, wavMenuItem, flacMenuItem;
+    private JMenu fileMenu, openMenu, playlistMenu;
+    private JMenuItem resetMenuItem, randomizeMenuItem, displayMenuItem, wavMenuItem, flacMenuItem;
     private JButton playButton, pauseButton, prevButton, nextButton;
     private JSlider playbackSlider;
     private AudioInputStream audioStream;
@@ -37,7 +37,6 @@ public class MainFrame extends JFrame{
     private PlaybackCurrentPosition_Thread playbackThread;
     private PlayListFrame playlistFrame;
     private Object lock = new Object();
-    private Object playbackLock = new Object();
     private boolean actionPerformed;
     private File openRequest = null;
     private double seekRequest = -1;  // Either -1 or a number in [0.0, 1.0]
@@ -77,26 +76,24 @@ public class MainFrame extends JFrame{
         menuBar = new JMenuBar();
 
         fileMenu = new JMenu("File");
+        openMenu = new JMenu("Open");
         playlistMenu = new JMenu("PlayList");
-        formatMenu = new JMenu("Format");
 
-        openMenuItem = new JMenuItem("Open");
         resetMenuItem = new JMenuItem("Reset");
         randomizeMenuItem = new JMenuItem("Randomize");
         displayMenuItem = new JMenuItem("Display");
         wavMenuItem = new JMenuItem(".wav");
         flacMenuItem = new JMenuItem(".flac");
 
-        fileMenu.add(openMenuItem);
+        fileMenu.add(openMenu);
         fileMenu.add(resetMenuItem);
+        openMenu.add(wavMenuItem);
+        openMenu.add(flacMenuItem);
         playlistMenu.add(randomizeMenuItem);
         playlistMenu.add(displayMenuItem);
-        formatMenu.add(wavMenuItem);
-        formatMenu.add(flacMenuItem);
 
         menuBar.add(fileMenu);
         menuBar.add(playlistMenu);
-        menuBar.add(formatMenu);
 
         setJMenuBar(menuBar);
 
@@ -114,14 +111,7 @@ public class MainFrame extends JFrame{
             public void mouseReleased(MouseEvent e) {}
             public void mouseExited(MouseEvent e) {}
         });
-        formatMenu.addMouseListener(new MouseListener() {
-            public void mouseEntered(MouseEvent e) {if (e.getSource() == formatMenu) formatMenu.doClick();}
-            public void mouseClicked(MouseEvent e) {}
-            public void mousePressed(MouseEvent e) {}
-            public void mouseReleased(MouseEvent e) {}
-            public void mouseExited(MouseEvent e) {}
-        });
-        openMenuItem.addActionListener(e -> OpenAction());
+        
         resetMenuItem.addActionListener(e -> ResetAction());
         randomizeMenuItem.addActionListener(e -> RandomizeAction());
         displayMenuItem.addActionListener(e -> DisplayAction());
@@ -272,15 +262,6 @@ public class MainFrame extends JFrame{
         int value = minValue + (int) (proportion * range);
         return Math.max(minValue, Math.min(value, maxValue));
     }
-    final private void OpenAction() {
-        if(fileChooser != null){
-            try {
-                createPlaylist();
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Error opening files", e);
-            }
-        }
-    }
     final private void ResetAction() {
         fileChooser.setCurrentDirectory(null);
         if(fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION){
@@ -308,16 +289,38 @@ public class MainFrame extends JFrame{
     final private void wavAction() {
         if (fileChooser == null) {
             fileChooser = new JFileChooser(new File("C:\\Users\\zhang\\Music\\iTunes\\iTunes Media\\Music\\FiiOMusic"));
-            openMenuItem.doClick();
+            try {
+                createPlaylist();
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error opening files", e);
+            }
         }
-        else fileChooser.setCurrentDirectory(new File("C:\\Users\\zhang\\Music\\iTunes\\iTunes Media\\Music\\FiiOMusic"));
+        else {
+            fileChooser.setCurrentDirectory(new File("C:\\Users\\zhang\\Music\\iTunes\\iTunes Media\\Music\\FiiOMusic"));
+            try {
+                createPlaylist();
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error opening files", e);
+            }
+        }
     }
     final private void flacAction() {
         if (fileChooser == null) {
             fileChooser  = new JFileChooser(new File("C:\\Users\\zhang\\Music\\Music Center"));
-            openMenuItem.doClick();
+            try {
+                createPlaylist();
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error opening files", e);
+            }
         }
-        else fileChooser.setCurrentDirectory(new File("C:\\Users\\zhang\\Music\\Music Center"));
+        else {
+            fileChooser.setCurrentDirectory(new File("C:\\Users\\zhang\\Music\\Music Center"));
+            try {
+                createPlaylist();
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error opening files", e);
+            }
+        }
     }
     final private void PlayAction() {
         try {
@@ -332,10 +335,11 @@ public class MainFrame extends JFrame{
                 if(clickcount == 0) {decoderThread.start();clickcount++;}
                 else {
                     synchronized (lock) {
-                        actionPerformed = true; // Update flag
-                        lock.notify(); // resume the waiting thread
-                        line.start();
+                        actionPerformed = true;
+                        seekRequest = -1;
+                        lock.notifyAll();
                     }
+                    line.start();
                 }
             }
         } catch (Exception e) {e.printStackTrace();}
@@ -353,7 +357,7 @@ public class MainFrame extends JFrame{
 
                 actionPerformed = false;
 
-                line.stop();
+                if(line != null) line.stop();
             }
         } catch (Exception ignore) {}
     }
@@ -468,7 +472,7 @@ public class MainFrame extends JFrame{
         playbackSlider.setEnabled(false);
 
         if (getFileExtension(fileGroup[index].getName()).equals("wav")){
-            if(decoderThread != null) {line.stop(); decoderThread.interrupt(); decoderThread = null;}
+            if(decoderThread != null) {line.stop(); line.close(); decoderThread.interrupt(); decoderThread = null;}
             if(clip != null) {clip.stop(); clip.close();}
 
             sliderLabelBegin.setText("00:00");
@@ -504,8 +508,16 @@ public class MainFrame extends JFrame{
             clickcount++;//avoid clickcount == 0
 
             if(clip != null) {clip.stop(); clip.close();}
+            if (line != null && line.isOpen()) {
+                line.stop();
+                line.close();
+                decoderThread.interrupt();
+                decoderThread = null;
+            }
 
             setFlacImageLabel(index);
+
+            sliderLabelBegin.setText("00:00");
 
             songTitle.setText(fileGroup[index].getName());
             updateSongFormat(fileGroup[index]);
@@ -513,7 +525,7 @@ public class MainFrame extends JFrame{
             openRequest = fileGroup[index]; // Set file for decoding
             decoderThread = new Thread(() -> doAudioDecoderWorkerLoop());
 
-            actionPerformed = true;
+            actionPerformed = true;//When pausing the current flac file, u can still switch songs.
 
             decoderThread.start();
         }
