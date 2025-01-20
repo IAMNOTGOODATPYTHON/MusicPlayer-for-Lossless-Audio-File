@@ -188,7 +188,7 @@ public class MainFrame extends JFrame{
         sliderLabelEnd = new JLabel("00:00");
         sliderLabelEnd.setForeground(Color.WHITE);
 
-        playbackSlider = new JSlider(JSlider.HORIZONTAL, 0, 100, 0);
+        playbackSlider = new JSlider(JSlider.HORIZONTAL, 0, 10000, 0);
         playbackSlider.setSize(200, 20);
         playbackSlider.setBackground(null);
         playbackSlider.setEnabled(false);
@@ -196,13 +196,18 @@ public class MainFrame extends JFrame{
         playbackSlider.addMouseMotionListener(new MouseMotionListener() {
             @Override
             public void mouseDragged(MouseEvent e) {
-                try{    
-                    if(clip.isRunning()){
-                        stopPlaybackCurrentPosition();
-                        sliderLabelBegin.setText(DurationConverter(playbackSlider.getValue()));
-                    }
-                    else sliderLabelBegin.setText(DurationConverter(playbackSlider.getValue()));
-                }catch(Exception ignore){}
+                if(getFileExtension(fileGroup[currentIndex].getName()).equals("wav")){
+                    try{    
+                        if(clip.isRunning()){
+                            stopPlaybackCurrentPosition();
+                            sliderLabelBegin.setText(DurationConverter(playbackSlider.getValue()));
+                        }
+                        else sliderLabelBegin.setText(DurationConverter(playbackSlider.getValue()));
+                    }catch(Exception ignore){}
+                }
+                if(getFileExtension(fileGroup[currentIndex].getName()).equals("flac")){
+                    moveSlider(e);
+                }
             }
             @Override
             public void mouseMoved(MouseEvent e) {}
@@ -210,24 +215,42 @@ public class MainFrame extends JFrame{
         
         playbackSlider.addMouseListener(new MouseAdapter(){
             public void mouseClicked(MouseEvent e) {
-                try{
-                    if(clip.isOpen()) {
-                        sliderLabelBegin.setText(DurationConverter(getValueForXPositionin(e.getX())));
-                        playbackSlider.setValue(getValueForXPositionin(e.getX()));
-                        clip.setMicrosecondPosition(getValueForXPositionin(e.getX()));
-                        if (playbackSlider.getValue() == playbackSlider.getMaximum()) AutomaticallyNextOrStop();
-                    }
-                }catch(Exception ignore) {}
+                if(getFileExtension(fileGroup[currentIndex].getName()).equals("wav")){
+                    try{
+                        if(clip.isOpen()) {
+                            sliderLabelBegin.setText(DurationConverter(getValueForXPositionin(e.getX())));
+                            playbackSlider.setValue(getValueForXPositionin(e.getX()));
+                            clip.setMicrosecondPosition(getValueForXPositionin(e.getX()));
+                            if (playbackSlider.getValue() == playbackSlider.getMaximum()) AutomaticallyNextOrStop();
+                        }            
+                    }catch(Exception ignore) {}
+                }
+            }
+            public void mousePressed(MouseEvent e) {
+                if(getFileExtension(fileGroup[currentIndex].getName()).equals("flac")){
+                    moveSlider(e);
+                }
             }
             public void mouseReleased(MouseEvent e) {
-                try{
-                    if(clip.isRunning()){
-                        clip.setMicrosecondPosition(playbackSlider.getValue());
-                        restartPlaybackCurrentPosition();
+                if(getFileExtension(fileGroup[currentIndex].getName()).equals("wav")){
+                    try{
+                        if(clip.isRunning()){
+                            clip.setMicrosecondPosition(playbackSlider.getValue());
+                            restartPlaybackCurrentPosition();
+                        }
+                        else clip.setMicrosecondPosition(playbackSlider.getValue());
+                    }catch(Exception ignore){}
+                }
+                else if(getFileExtension(fileGroup[currentIndex].getName()).equals("flac")){
+                    moveSlider(e);
+                    if (playbackSlider.isEnabled()) {
+                        synchronized(lock) {
+                            seekRequest = (double)playbackSlider.getValue() / playbackSlider.getMaximum();
+                            lock.notify();
+                        }
                     }
-                    else clip.setMicrosecondPosition(playbackSlider.getValue());
-                    if (playbackSlider.getValue() == playbackSlider.getMaximum()) AutomaticallyNextOrStop();
-                }catch(Exception ignore){}
+                }
+                if (playbackSlider.getValue() == playbackSlider.getMaximum()) AutomaticallyNextOrStop();
             }
         });
         
@@ -236,6 +259,9 @@ public class MainFrame extends JFrame{
         sliderPanel.add(sliderLabelEnd);
 
         add(sliderPanel);
+    }
+    private void moveSlider(MouseEvent e) {
+        if (playbackSlider.isEnabled()) playbackSlider.setValue(getValueForXPositionin(e.getX()));
     }
     final private int getValueForXPositionin(int i) {
         int sliderWidth = playbackSlider.getWidth(); // Get the slider's total width
@@ -529,7 +555,7 @@ public class MainFrame extends JFrame{
         double durationInSeconds = getDurationInSeconds(file);
         int minutes = (int) (durationInSeconds / 60); int seconds = (int) (durationInSeconds % 60); 
         return String.format("%d:%02d", minutes, seconds);
-    }   
+    }  
     final private String DurationConverter(int Microsecond) {
         return String.format("%d:%02d", (Microsecond/1000000) / 60, (Microsecond/1000000) % 60);
     }
@@ -581,7 +607,7 @@ public class MainFrame extends JFrame{
     final private long getClipMicrosecondPosition() {return clip.getMicrosecondPosition();}
     final private void AutomaticallyNextOrStop() {
         try {
-            if( playbackSlider.getValue() == playbackSlider.getMaximum()) {
+            if(playbackSlider.getValue() == playbackSlider.getMaximum()) {
                 if (currentIndex == fileGroup.length - 1) {
                     currentIndex = -1; nextButton.doClick();
                 }
