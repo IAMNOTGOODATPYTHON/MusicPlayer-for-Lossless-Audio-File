@@ -16,7 +16,6 @@ import org.jaudiotagger.audio.*;
 
 public class MainFrame extends JFrame{
     private static final Logger LOGGER = Logger.getLogger(Frame.class.getName());
-    //private static final String DEFAULT_MUSIC_PATH = "C:\\Users\\zhang\\Music\\iTunes\\iTunes Media\\Music\\FiiOMusic";
     private int currentIndex = 0;
     private int openCount = 0;
     private int songNumber = 1;
